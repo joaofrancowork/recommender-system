@@ -85,12 +85,22 @@ def test_api_endpoints(artifacts: Path, ds: Dataset) -> None:
     assert client.get("/users/99999/recommendations").status_code == 404
 
     new = client.post("/recommendations", json={"liked_movie_ids": [1, 6, 11], "k": 5}).json()
+    liked_titles = {"Movie 1 (1991)", "Movie 6 (1996)", "Movie 11 (2001)"}
+    reasons = [m["because_you_liked"] for m in new["items"]]
+    assert any(reasons) and all(r in liked_titles for r in reasons if r)
     assert len(new["items"]) == 5 and all(m["movie_id"] not in {1, 6, 11} for m in new["items"])
     assert client.post("/recommendations", json={"liked_movie_ids": [123456]}).status_code == 422
 
     similar = client.get("/movies/1/similar", params={"k": 3}).json()["items"]
     assert len(similar) == 3 and all(m["movie_id"] != 1 for m in similar)
     assert client.get("/movies/123456/similar").status_code == 404
+
+
+def test_explanation_is_none_without_a_link(artifacts: Path) -> None:
+    store = get_store(str(artifacts))
+    assert store.explain(0, []) is None
+    unrelated = np.where(np.asarray(store.knn[0].todense()).ravel() == 0)[0]
+    assert store.explain(int(unrelated[1]), [0]) is None
 
 
 def test_api_without_artifacts(tmp_path: Path) -> None:
