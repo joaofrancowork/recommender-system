@@ -25,6 +25,7 @@ class Movie(BaseModel):
     title: str
     genres: str
     score: float
+    because_you_liked: str | None = None
 
 
 class Recommendations(BaseModel):
@@ -82,7 +83,20 @@ class Store:
     ) -> list[Movie]:
         scores = self.scores(model, history, user)
         picks = top_k(scores.astype(np.float32), np.array(history, dtype=np.int32), k)
-        return [self._movie(i, float(scores[i])) for i in picks]
+        movies = [self._movie(i, float(scores[i])) for i in picks]
+        for movie, item in zip(movies, picks, strict=True):
+            movie.because_you_liked = self.explain(int(item), history)
+        return movies
+
+    def explain(self, item: int, history: list[int]) -> str | None:
+        """The liked movie most similar to ``item`` (its strongest item-kNN link)."""
+        if not history:
+            return None
+        similarity = np.asarray(self.knn[history, item].todense()).ravel()
+        best = int(np.argmax(similarity))
+        if similarity[best] <= 0:
+            return None
+        return str(self.movies.iloc[history[best]].title)
 
     def _movie(self, i: int, score: float) -> Movie:
         row = self.movies.iloc[int(i)]

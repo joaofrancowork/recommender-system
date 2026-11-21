@@ -86,6 +86,17 @@ curl -s -X POST localhost:8000/recommendations -H 'content-type: application/jso
 curl -s "localhost:8000/movies/2571/similar?k=5"          # The Matrix
 ```
 
+Every recommendation carries a reason, taken from the strongest item-kNN link to the user's
+history. For the new user above:
+
+```text
+Monsters, Inc. (2001)     because you liked Finding Nemo (2003)
+Toy Story 3 (2010)        because you liked Finding Nemo (2003)
+Shrek 2 (2004)            because you liked Shrek (2001)
+Toy Story 2 (1999)        because you liked Toy Story (1995)
+Incredibles, The (2004)   because you liked Finding Nemo (2003)
+```
+
 | Endpoint | Description |
 |---|---|
 | `GET /users/{id}/recommendations?model=hybrid\|als\|item_knn\|popularity` | Known users; seen items are excluded |
