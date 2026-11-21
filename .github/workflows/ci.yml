@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv python install ${{ matrix.python }}
+      - run: uv sync --frozen --python ${{ matrix.python }}
+      - name: Lint
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+      - name: Type check
+        run: uv run mypy
+      - name: Tests
+        run: uv run pytest --cov-report=xml
+
+  evaluate:
+    # Full pipeline on MovieLens with a quality gate against the popularity baseline.
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+      - run: uv run recsys evaluate --content genres --out artifacts | tee eval.txt
+      - name: Quality gate
+        run: |
+          uv run python - <<'PY'
+          rows = {}
+          for line in open("artifacts/evaluation.md"):
+              cells = [c.strip() for c in line.strip("|\n").split("|")]
+              if cells and cells[0] in {"popularity", "als", "hybrid"}:
+                  rows[cells[0]] = float(cells[1])
+          print(rows)
+          assert rows["als"] > rows["popularity"] * 1.2, "ALS no longer beats popularity"
+          assert rows["hybrid"] > rows["popularity"] * 1.2, "hybrid no longer beats popularity"
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: evaluation
+          path: artifacts/evaluation.md
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: recsys:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Smoke test the API
+        run: |
+          docker run -d -p 8000:8000 --name api recsys:ci
+          for i in $(seq 1 30); do curl -sf localhost:8000/health && break; sleep 1; done
+          curl -sf "localhost:8000/movies/2571/similar?k=3"
