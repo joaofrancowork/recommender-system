@@ -45,7 +45,7 @@ packages = ["src/recsys"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-extend-exclude = ["notebooks"]
+extend-exclude = ["notebooks", "scripts/build_notebook.py"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "N", "PTH"]
